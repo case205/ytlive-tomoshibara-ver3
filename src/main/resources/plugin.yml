@@ -1,0 +1,19 @@
+name: YtStream
+version: ${version}
+main: dev.ytstream.YtStreamPlugin
+api-version: '1.21'
+authors: [YtStream]
+description: Stream server info (players, chat, join/leave) to YouTube Live via FFmpeg, with YouTube API auto go-live, controlled by in-game commands.
+commands:
+  ytstream:
+    description: YouTube Live 配信の操作
+    usage: /<command> <start|stop|restart|status|reload|preview|ffmpeg|bgm|auth|notice>
+    aliases: [yts]
+    permission: ytstream.admin
+permissions:
+  ytstream.admin:
+    description: 配信の操作を許可
+    default: op
+  ytstream.hide:
+    description: このプレイヤーを配信画面に表示しない
+    default: false

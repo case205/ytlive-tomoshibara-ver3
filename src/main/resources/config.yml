@@ -1,0 +1,239 @@
+# ============================================================
+#  YtStream 設定ファイル
+#  変更後は /ytstream reload(実行中の配信へは /ytstream restart 後に反映)
+#  配信画面のレイアウト確認は /ytstream preview(plugins/YtStream/preview.png)
+# ============================================================
+
+# 配信画面に表示するサーバー名
+server-name: "My Minecraft Server"
+
+youtube:
+  # ストリームキーの指定方法(優先順位: 環境変数 > secrets.yml > ここ)
+  #   1. 環境変数 YTSTREAM_KEY            ← 推奨
+  #   2. plugins/YtStream/secrets.yml に  stream-key: "xxxx-xxxx-xxxx-xxxx-xxxx"
+  #   3. この項目(平文保存になるため非推奨)
+  # ストリームキーはゲーム内コマンドで入力しないでください(コマンドログに残ります)。
+  # ※ 下の api.enabled を使う場合、キーは不要です(プラグインが専用ストリームを用意します)。
+  stream-key: ""
+  rtmp-url: "rtmp://a.rtmp.youtube.com/live2"   # rtmps://a.rtmps.youtube.com:443/live2 も可(TLS・443番)
+  # YouTube以外のRTMPサーバーへ送る場合のみ true(誤送信・情報漏えい防止の安全装置)
+  allow-custom-host: false
+
+  # バックアップ取り込みサーバー: 接続失敗が続いたら、プライマリとバックアップを交互に試す
+  backup-ingest:
+    enabled: false
+    url: "rtmp://b.rtmp.youtube.com/live2?backup=1"   # API連携時はYouTubeが返すバックアップURLを自動使用
+    switch-after-failures: 2
+
+  # ------------------------------------------------------------
+  #  YouTube API 連携(推奨)
+  #  「YouTubeの配信ページを開いていないと配信が始まらない」問題を解決します。
+  #  プラグインが API で配信枠を作成 → ストリームへ紐付け → 映像の到着を確認して「ライブ」へ切替 → 停止時に終了、
+  #  までを行うため、YouTube Studio を開く必要がありません。視聴URLも自動で取得し、告知に使われます。
+  #  準備(初回のみ。README「YouTube API連携」参照):
+  #    1. Google Cloud で YouTube Data API v3 を有効化し、
+  #       OAuthクライアント(種類: 「テレビと入力が限られたデバイス」)を作成
+  #    2. クライアントID/シークレットを 環境変数 YTSTREAM_CLIENT_ID / YTSTREAM_CLIENT_SECRET
+  #       または secrets.yml の youtube-client-id / youtube-client-secret に設定
+  #    3. enabled: true にして /ytstream reload → /ytstream auth(表示されるURLとコードで許可)
+  # ------------------------------------------------------------
+  api:
+    enabled: false
+    client-id: ""                 # secrets.yml / 環境変数を推奨(ここに書くと平文保存)
+    client-secret: ""
+    # own = プラグイン専用のストリーム(stream-title)を自動作成/再利用(推奨)
+    # key = 上の stream-key に一致する既存ストリームを使う
+    stream-source: own
+    stream-title: "YtStream"
+    broadcast:
+      mode: reuse                 # reuse = 予定/配信中の枠を再利用し無ければ作成 / create = 毎回新しい枠を作成
+      title: "{server} ライブ配信"  # {server} {date} {time} が使えます(< > は使えません)
+      description: "Minecraftサーバー「{server}」のライブ配信です。"
+      privacy: public             # public | unlisted(限定公開) | private
+      made-for-kids: false        # 子ども向けとして申告するか(YouTubeのポリシーに従って設定)
+      latency: normal             # normal | low | ultraLow(低遅延ほど視聴側のバッファが減る)
+      dvr: true                   # 視聴者が巻き戻しできる
+      embed: true                 # 外部サイトへの埋め込みを許可
+      auto-stop: false            # true だと送信が途切れた時点でYouTubeが配信を終了(再接続中に終わるので非推奨)
+    end-on-stop: true             # /ytstream stop・サーバー停止時に配信を「終了」にする(restart では終了しない)
+    go-live-timeout-seconds: 90   # 映像の到着からライブ切替を待つ最大秒数
+    fallback-to-stream-key: true  # API が使えない時(未連携・障害)にストリームキー方式で配信を続ける
+    timezone: ""                  # {date} {time} のタイムゾーン(例 Asia/Tokyo。空=サーバーの既定)
+    health-check: true            # YouTube側の受信状態(良好/不良)を監視し、不良になったら管理者へ通知
+    viewers:
+      enabled: true               # 同時視聴者数をヘッダーに表示(header.columns に viewers)
+      interval-seconds: 60
+    # YouTubeのチャットを取得して配信画面/サーバー内に流す(クォータ消費が大きいので既定は無効)
+    chat:
+      enabled: false
+      interval-seconds: 30        # 1回5ユニット。30秒間隔で24時間 ≒ 14,400ユニット(既定上限10,000/日を超えます)
+      show-on-stream: true        # 配信画面のチャット欄に ▶ 付きで表示
+      relay-to-game: true         # サーバー内チャットにも流す
+      format: "[YouTube] {name}: {message}"
+    # APIクォータ(既定 10,000ユニット/日、太平洋時間0時リセット)。
+    # 視聴者数・チャット等の任意の取得は reserve を残して自動停止し、配信の開始/終了に必要な分を必ず確保します。
+    quota:
+      daily-budget: 10000
+      reserve: 600
+    http-timeout-seconds: 15
+
+video:
+  width: 1280            # 1280x720 が既定。1920x1080 も可(CPU負荷は約2倍)
+  height: 720
+  fps: 30                # 静止画面が中心なので 15〜30 で十分。下げるほどCPUに優しい
+  bitrate-kbps: 2500     # 720p30の目安 2500〜4500 / 1080p30の目安 4500〜9000
+  codec: libx264         # libx264 | h264_nvenc | h264_qsv | h264_videotoolbox | h264_amf
+  preset: veryfast       # libx264のみ。CPUが厳しければ superfast / ultrafast
+  tune: zerolatency
+  threads: 2             # エンコードに使うCPUスレッド数(0=自動)。Minecraft本体を守るため既定は2
+  low-priority: true     # Linuxで nice 10 を付けて起動(サーバー本体を優先)
+  rate-control: cbr      # cbr = 固定ビットレート(YouTube推奨・受信が安定) / vbr = 可変
+  # 変化したフレームだけをFFmpegへ送る(静止中は keepalive-fps で再送し、FFmpeg側で fps へ補完)。
+  # 静止画面が多い配信ではパイプ転送と色変換がほぼ不要になり、CPU使用量が下がります。
+  send-only-changed-frames: true
+  keepalive-fps: 5
+  x264-params: ""        # 上級者向け(例 "aq-mode=2")。英数字と = : . , + - のみ
+
+audio:
+  enabled: true          # 無音トラックを付与(YouTubeの音声なし警告を避ける)
+  bitrate-kbps: 128
+
+ffmpeg:
+  # "ffmpeg" = plugins/YtStream/ffmpeg/ → PATH の順で自動検索。絶対パスも指定可
+  path: "ffmpeg"
+
+reconnect:
+  enabled: true
+  max-attempts: 0        # 0 = 無制限(サーバー稼働中は配信を維持し続ける。推奨)
+  initial-delay-seconds: 5
+  max-delay-seconds: 60  # 指数バックオフの上限
+  jitter: true           # 再接続の間隔を±20%ゆらし、障害復旧直後の集中を避ける
+  stall-timeout-seconds: 20     # FFmpegの送信/映像入力がこの秒数止まったら切断とみなして自動復旧
+  connect-timeout-seconds: 25   # FFmpeg起動からYouTubeへの接続完了を待つ秒数
+  preflight-check: true         # FFmpeg起動前に送信先へ接続できるか確認(ネットワーク断を即座に検知)
+  preflight-timeout-seconds: 5
+  stable-seconds: 60            # この秒数配信が続いたら再接続回数をリセット
+
+monitor:
+  slow-encode-warning: true     # エンコード速度が1.0xを下回り続けたら管理者へ通知
+  slow-encode-seconds: 60
+
+# サーバー起動時に自動で配信を開始(常時配信したい場合)
+auto-start:
+  enabled: false
+  delay-seconds: 15
+
+# BGM: plugins/YtStream/bgm/ に mp3/ogg/wav/flac/m4a/opus を置くだけ(配信中の追加も自動反映)
+# ※ 著作権フリー/ライセンス済みの曲を使ってください(YouTubeのContent IDで配信が止まる場合があります)
+bgm:
+  enabled: true
+  folder: "bgm"
+  shuffle: true
+  volume: 50             # 0〜100(ゲーム内: /ytstream bgm volume <0-100>)
+  show-now-playing: true # 画面下部に「♪ 曲名」を表示
+
+# 画面下部に順番に表示されるお知らせ(参加アドレス・Discord・ルールなど。最大10件)
+# {online} {max} が使えます。視聴者をプレイヤーへ変える一番大事な枠です。
+info:
+  enabled: true
+  interval-seconds: 8
+  show-progress: true    # 次のお知らせまでの残り時間を細いバーで表示
+  messages:
+    - "サーバーに参加しよう！ Java版: play.example.com / 統合版: play.example.com:19132"
+    - "Discordで仲間募集中 → discord.gg/xxxxxxx"
+    - "現在 {online} / {max} 人がプレイ中！ 初心者も大歓迎です"
+
+# サーバー内のプレイヤーへの配信告知(YouTubeのURLを入れると視聴者が増えます)
+promo:
+  live-url: ""           # 空でも API 連携時は配信URLを自動で使用。例 "https://www.youtube.com/@channel/live"
+  broadcast-on-live: true          # 配信開始時にサーバーチャットで告知
+  broadcast-interval-minutes: 30   # 配信中の定期告知(0で無効)
+  broadcast-message: "サーバーをYouTubeでライブ配信中です！ クリックで視聴 {url}"
+  join-notice: true                # 配信中に参加した本人へ「配信に映ります」と通知(プライバシー配慮)
+  join-notice-message: "このサーバーはYouTubeでライブ配信中です。チャットとプレイヤー名が配信に映ります。"
+
+background:
+  # plugins/YtStream/ 内の画像(PNG/JPG)。無い場合は内蔵のMinecraft風背景を自動生成
+  path: "background.png"
+
+theme:
+  name: default          # default | nether | end | ocean | sakura | midnight | light
+  accent: ""             # 例 "#55FF55"(空=テーマ既定)
+  panel-color: ""        # パネルの色を上書き(例 "#101820")。明るい色を指定すると文字は自動で濃色に
+  text-color: ""         # 文字色を上書き(例 "#FFFFFF")
+  panel-opacity: 62      # 0〜100
+  style: glass           # glass = 背景をぼかした半透明パネル / flat = 単色の半透明パネル
+  blur-radius: 14        # glass のぼかしの強さ(0〜40)
+  shadow: true           # パネルのやわらかい影
+  accent-line: true      # ヘッダー上端のアクセントライン
+  corner-radius: 16      # パネルの角丸(720p基準のpx)
+  text-shadow: true      # 文字の影(背景が明るくても読みやすく)
+  font: "SansSerif"      # 日本語が文字化けする場合は日本語フォント名か font-file を指定
+  font-file: ""          # plugins/YtStream/ 内のTTF/OTF(例 "fonts/NotoSansJP.ttf")
+
+# ロゴ・透かし画像(layout.logo の枠内に縦横比を保って表示。起動時に1回描くだけなので負荷ゼロ)
+overlay:
+  logo: ""               # plugins/YtStream/ 内の画像(例 "logo.png")。空=表示しない
+  logo-opacity: 90       # 0〜100
+
+# ヘッダー右側に並べる情報(左→右の順、最大4つ)
+#   online = 人数とゲージ / viewers = YouTube同時視聴者数(API連携時) / uptime = 稼働時間
+#   tps = サーバーTPS / clock = 現在時刻
+header:
+  columns: [online, viewers, uptime]
+  clock-format: "HH:mm"  # Javaの日時書式(例 "HH:mm:ss", "M/d HH:mm")
+  timezone: ""           # 例 "Asia/Tokyo"(空=サーバーの既定)
+
+display:
+  chat: true             # ※チャットは公開配信に映ります。プライバシーに注意
+  join-leave: true
+  events: true           # 実績(Advancement)達成・死亡の通知
+  player-list: true
+  uptime: true           # false にすると header.columns から uptime を除外
+
+chat:
+  max-lines: 10
+  max-length: 100
+  lifetime-seconds: 0    # 0=消えない(古いものから押し出される) / 例 60=60秒で消える
+  youtube-badge: true    # YouTubeからのチャットに ▶ マークを付ける(モデレーターは青、スーパーチャットは金色の帯)
+  blocked-patterns: []   # 伏せ字にする正規表現。例: ["\\d{3}-\\d{4}", "password"](YouTubeチャットにも適用)
+
+notifications:
+  lifetime-seconds: 6
+  notice-lifetime-seconds: 10   # /ytstream notice で出すお知らせの表示秒数
+
+players:
+  hide-vanished: true    # バニッシュ中のプレイヤーを映さない(metadata "vanished")
+  bedrock-prefix: "."    # Floodgateのプレフィックス(統合版プレイヤー判別用)
+  show-ping: true        # 応答速度を4段階のバーで表示
+  show-platform: true    # 統合版プレイヤーに「BE」バッジ(名前のプレフィックスは隠す)
+  sort: join             # join = 参加順 / name = 名前順
+
+# 描画の最適化(通常は変更不要)
+performance:
+  static-layer-cache: true   # パネル・影・ぼかし・見出し・ロゴを起動時に1回だけ描いて使い回す
+  partial-redraw: true       # 変化した部品の領域だけを描き直す
+
+# 各パーツの位置。画面に対する相対値(0〜1)なので解像度を変えても崩れません
+layout:
+  header:  { x: 0.02, y: 0.03, w: 0.96, h: 0.13 }
+  toasts:  { x: 0.02, y: 0.19, w: 0.46, h: 0.26 }
+  chat:    { x: 0.02, y: 0.50, w: 0.48, h: 0.38 }
+  players: { x: 0.76, y: 0.19, w: 0.22, h: 0.69 }
+  footer:  { x: 0.02, y: 0.905, w: 0.96, h: 0.065 }
+  logo:    { x: 0.53, y: 0.19, w: 0.20, h: 0.20 }
+
+# 表示文言({name} {n} が置換されます)
+labels:
+  online: "オンライン"
+  uptime: "稼働時間"
+  players: "プレイヤー"
+  chat: "チャット"
+  joined: "{name} が参加しました"
+  left: "{name} が退出しました"
+  more: "他 {n} 人"
+  nowplaying: "♪"
+  viewers: "視聴者"
+  tps: "TPS"
+  clock: "時刻"
+  live: "LIVE"
